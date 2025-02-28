@@ -1,14 +1,25 @@
-import cv2
-import numpy as np
-import time
 import logging
 import threading
+import time
+
+import cv2
+import numpy as np
+
 
 class TargetDetector:
-    def __init__(self, camera_index=0, desired_fps=15, desired_width=320, desired_height=240, debug_mode=False):
+    def __init__(
+        self,
+        camera_index=0,
+        desired_fps=15,
+        desired_width=320,
+        desired_height=240,
+        debug_mode=False,
+    ):
         self.cap = self.initialize_camera(camera_index, desired_width, desired_height)
         self.desired_fps = desired_fps
-        self.color_ranges = [((100, 100, 100), (120, 255, 255))]  # Example blue color range
+        self.color_ranges = [
+            ((100, 100, 100), (120, 255, 255))
+        ]  # Example blue color range
         self.fps_start_time = time.time()
         self.fps_interval = 1.0 / self.desired_fps
         self.y_displacement = 0
@@ -27,8 +38,8 @@ class TargetDetector:
 
     def centroid(self, contour):
         M = cv2.moments(contour)
-        if M['m00'] != 0:
-            return int(M['m10'] / M['m00']), int(M['m01'] / M['m00'])
+        if M["m00"] != 0:
+            return int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])
         return None
 
     def start_detection(self):
@@ -52,8 +63,12 @@ class TargetDetector:
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
             centers = []
             for color_range in self.color_ranges:
-                mask = cv2.inRange(hsv, np.array(color_range[0]), np.array(color_range[1]))
-                contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+                mask = cv2.inRange(
+                    hsv, np.array(color_range[0]), np.array(color_range[1])
+                )
+                contours, _ = cv2.findContours(
+                    mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
+                )
 
                 if contours:
                     target_contour = max(contours, key=cv2.contourArea)
@@ -64,13 +79,15 @@ class TargetDetector:
                             self.y_displacement = center[1] - (frame.shape[0] // 2)
                         if self.debug_mode:
                             # Draw the contour and centroid for debugging
-                            cv2.drawContours(frame, [target_contour], -1, (0, 255, 0), 2)
+                            cv2.drawContours(
+                                frame, [target_contour], -1, (0, 255, 0), 2
+                            )
                             cv2.circle(frame, center, 5, (255, 0, 0), -1)
 
             if self.debug_mode:
                 # Ensure GUI operations are on the main thread or compatible thread
                 cv2.imshow("Debug Stream", frame)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
+                if cv2.waitKey(1) & 0xFF == ord("q"):
                     self.stop_detection()
                     break
 
@@ -88,4 +105,3 @@ class TargetDetector:
 
     def release(self):
         self.cap.release()
-

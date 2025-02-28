@@ -1,6 +1,8 @@
-import RPi.GPIO as GPIO
-from Firmware.old.stepper_motorV2 import StepperMotorController
 import time
+
+import RPi.GPIO as GPIO
+
+from Firmware.old.stepper_motorV2 import StepperMotorController
 
 # Constants
 MAX_SPEED = 0.00001
@@ -23,12 +25,20 @@ GPIO.setmode(GPIO.BCM)
 GPIO.setup(LIMIT_SWITCH_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 # Initialize motor controller
-motor_controller = StepperMotorController(step_pin=STEP_PIN, dir_pin=DIR_PIN, ms1_pin=MS1_PIN, ms2_pin=MS2_PIN, ms3_pin=MS3_PIN)
+motor_controller = StepperMotorController(
+    step_pin=STEP_PIN,
+    dir_pin=DIR_PIN,
+    ms1_pin=MS1_PIN,
+    ms2_pin=MS2_PIN,
+    ms3_pin=MS3_PIN,
+)
 motor_controller.set_microstepping(MS_RESOLUTION)
+
 
 def cleanup_gpio():
     motor_controller.cleanup()
     GPIO.cleanup()
+
 
 # Main logic
 motor_controller.set_speed(MAX_SPEED, DELTA_V)

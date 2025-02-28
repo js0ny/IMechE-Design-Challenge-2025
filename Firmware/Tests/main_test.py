@@ -1,12 +1,11 @@
-import cv2
-import numpy as np
-
-import time
-import pigpio
-from gpiozero import Button, DistanceSensor
-
 import queue
 import threading
+import time
+
+import cv2
+import numpy as np
+import pigpio
+from gpiozero import Button, DistanceSensor
 
 # GPIO PINS
 STEP_PIN = 21
@@ -20,8 +19,8 @@ TRIG_PIN = 27
 ECHO_PIN = 17
 
 # NAV CONSTANTS
-SAFE_DIST = 150 # in mm
-TARGET_CLEARANCE_TIME = 150 # in mm
+SAFE_DIST = 150  # in mm
+TARGET_CLEARANCE_TIME = 150  # in mm
 X_OFFSET_CONV_FACTOR = 1
 DATUM_OFFSET = 100
 REQ_CONSEC = 5
@@ -32,13 +31,14 @@ PHASE_1_STOP_TIME = 7.5
 # Create a queue to hold target offsets
 target_offset_queue = queue.Queue()
 
+
 def detector(fps_limit=30, width=640, height=480, debug=False):
     cap = cv2.VideoCapture(0)
-    
+
     # Set the properties for resolution
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-    
+
     # Set the frame rate limit
     cap.set(cv2.CAP_PROP_FPS, fps_limit)
 
@@ -77,14 +77,28 @@ def detector(fps_limit=30, width=640, height=480, debug=False):
 
             if debug:
                 # Display the displacement on the frame
-                cv2.putText(frame, f"Displacement: {displacement_x}px", (50, 50),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(
+                    frame,
+                    f"Displacement: {displacement_x}px",
+                    (50, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (0, 255, 0),
+                    2,
+                )
 
                 # Draw the largest contour and its center
                 cv2.drawContours(frame, [largest_contour], -1, (0, 255, 0), 3)
                 cv2.circle(frame, (cX, cY), 7, (255, 255, 255), -1)
-                cv2.putText(frame, "center", (cX - 20, cY - 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                cv2.putText(
+                    frame,
+                    "center",
+                    (cX - 20, cY - 20),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (255, 255, 255),
+                    2,
+                )
         else:
             # Clear the queue if no contours are found
             while not target_offset_queue.empty():
@@ -102,12 +116,14 @@ def detector(fps_limit=30, width=640, height=480, debug=False):
     if debug:
         cv2.destroyAllWindows()
 
+
 def distance():
     return ultrasonic.distance * 10
 
+
 def move_motor(start_frequency, final_frequency, steps, dir=1, run_time=None):
     """Generate ramp waveforms from start to final frequency.
-    
+
     Parameters:
     - start_frequency: Starting frequency of the ramp.
     - final_frequency: Ending frequency of the ramp.
@@ -132,13 +148,13 @@ def move_motor(start_frequency, final_frequency, steps, dir=1, run_time=None):
         micros = int(500000 / current_frequency)  # microseconds for half a step
         wf = [
             pigpio.pulse(1 << STEP_PIN, 0, micros),
-            pigpio.pulse(0, 1 << STEP_PIN, micros)
+            pigpio.pulse(0, 1 << STEP_PIN, micros),
         ]
         pi.wave_add_generic(wf)
         wave_id = pi.wave_create()
         wid.append(wave_id)  # Append the new wave ID to the list
         current_frequency += frequency_step  # increment or decrement frequency
-    
+
     # Generate a chain of waves
     chain = []
     for wave_id in wid:
@@ -159,6 +175,7 @@ def move_motor(start_frequency, final_frequency, steps, dir=1, run_time=None):
     global last_wave_ids
     last_wave_ids = wid  # Store wave IDs globally to allow stopping later
 
+
 def stop_motor():
     """Stop any running waveforms and clean up."""
     global last_wave_ids
@@ -167,6 +184,7 @@ def stop_motor():
         for wave_id in last_wave_ids:
             pi.wave_delete(wave_id)  # Clean up each waveform individually
     last_wave_ids = None
+
 
 def align():
     consecutive_aligned = 0
@@ -199,23 +217,32 @@ def align():
     for _ in range(DATUM_OFFSET):
         pi.gpio_trigger(STEP_PIN, 10, 1)
         time.sleep(0.001)
-    
+
     pi.write(STEP_PIN, 0)
+
 
 def cycle():
     global wave_ids
 
     # Start moving forward
-    move_motor(start_frequency=10, final_frequency=1000, steps=100, dir=1, run_time=None)
+    move_motor(
+        start_frequency=10, final_frequency=1000, steps=100, dir=1, run_time=None
+    )
     start_time = time.time()
 
     # Continuously check distance
     while True:
         current_distance = distance()  # Measure distance from barrier
-        
+
         if current_distance <= SAFE_DIST:
             # Slow down as it gets close to the barrier
-            move_motor(start_frequency=1000, final_frequency=400, steps=100, dir=1, run_time=None)
+            move_motor(
+                start_frequency=1000,
+                final_frequency=400,
+                steps=100,
+                dir=1,
+                run_time=None,
+            )
             end_time = time.time()
 
         if limit_switch.is_pressed:
@@ -226,7 +253,13 @@ def cycle():
         time.sleep(0.1)  # Short delay to reduce sensor noise and CPU load
 
     # Return to the origin (for simplicity, assume this is reverse of travel_distance)
-    move_motor(start_frequency=100, final_frequency=1000, steps=50, dir=0, run_time=(end_time - start_time) + 20)
+    move_motor(
+        start_frequency=100,
+        final_frequency=1000,
+        steps=50,
+        dir=0,
+        run_time=(end_time - start_time) + 20,
+    )
 
     # Align with the origin / target
     align()
@@ -235,22 +268,31 @@ def cycle():
     time.sleep(PHASE_1_STOP_TIME)
 
     # Move forward to find the next target and align with it
-    move_motor(start_frequency=100, final_frequency=1000, steps=100, dir=1, run_time=None)
+    move_motor(
+        start_frequency=100, final_frequency=1000, steps=100, dir=1, run_time=None
+    )
 
     # Time to clear the origin / first target
     time.sleep(10)  # Move forward for 10 seconds or until target is found
 
     while True:
         if not target_offset_queue.empty():
-            move_motor(start_frequency=1000, final_frequency=300, steps=100, dir=1, run_time=None)
+            move_motor(
+                start_frequency=1000,
+                final_frequency=300,
+                steps=100,
+                dir=1,
+                run_time=None,
+            )
             break
-    
+
     # Align with the target
     align()
 
     # Finally, stop the motor
     stop_motor(pi)
     print("Cycle complete: Aligned with the target.")
+
 
 def menu():
     while True:
@@ -271,11 +313,12 @@ def menu():
                 stop_motor()  # Ensure motor stops immediately
                 cycle_thread.join()  # Wait for the cycle thread to finish
                 break  # Exit the loop to reset the menu
-            
+
         cycle_thread.join()  # Ensure the cycle thread has fully finished before looping back
 
         # Optionally add a small delay
         time.sleep(0.1)  # Helps with debouncing and CPU load
+
 
 pi = pigpio.pi()
 if not pi.connected:
@@ -292,21 +335,21 @@ reset = Button(RESET_PIN)
 
 wave_ids = []  # Keep track of created wave IDs globally or in shared context
 
-#limit_switch.isPressed()
-#print("The button was pressed!")
+# limit_switch.isPressed()
+# print("The button was pressed!")
 
 try:
     detector_thread = threading.Thread(target=detector)
     detector_thread.start()
-    
-    #menu_thread = threading.Thread(target=menu)
-    #menu_thread.start()
-    
+
+    # menu_thread = threading.Thread(target=menu)
+    # menu_thread.start()
+
     cycle_thread = threading.Thread(target=cycle)
     cycle_thread.start()
 except KeyboardInterrupt:
     print("KeyboardInterrupt detected, stopping all threads.")
 finally:
     detector_thread.join()
-    #menu_thread.join()
+    # menu_thread.join()
     cycle_thread.join()

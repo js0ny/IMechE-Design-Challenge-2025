@@ -1,9 +1,10 @@
-import pigpio
-from time import time, sleep
+from time import sleep, time
 
+import pigpio
 
 TRIG_PIN = 17
 ECHO_PIN = 18
+
 
 def measure_distance():
     # Send a 10us pulse to start the measurement
@@ -21,9 +22,12 @@ def measure_distance():
 
     # Calculate the distance
     elapsed_time = end_time - start_time
-    distance = (elapsed_time * 343000) / 2  # Speed of sound is ~343000 mm/s at sea level
+    distance = (
+        elapsed_time * 343000
+    ) / 2  # Speed of sound is ~343000 mm/s at sea level
 
     return round(distance)
+
 
 # Connect to pigiod daemon
 print("Connecting to pigpio daemon.")

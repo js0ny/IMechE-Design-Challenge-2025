@@ -1,6 +1,7 @@
+import math
 import threading
 from time import sleep, time
-import math
+
 import pigpio
 
 # GPIO Pins configuration
@@ -21,6 +22,7 @@ REQ_CONSEC = 5  # Required consecutive zero-displacements for alignment
 # Specification constants
 PHASE_1_STOP_TIME = 7.5  # Stop time in phase 1 in seconds
 
+
 def move_motor(direction, total_steps, max_speed=500, accel_steps=100):
     """
     Moves the motor with constant acceleration and deceleration.
@@ -32,12 +34,12 @@ def move_motor(direction, total_steps, max_speed=500, accel_steps=100):
         accel_steps (int): Steps over which to accelerate and decelerate.
     """
     pi.write(DIR_PIN, direction)
-    
+
     # Ensure acceleration/deceleration phases don't exceed half the total steps
     accel_steps = min(accel_steps, total_steps // 2)
     decel_start = total_steps - accel_steps
     speed_increment = max_speed / accel_steps  # Calculate speed increment for each step
-    
+
     current_speed = 0
 
     for step in range(total_steps):
@@ -48,30 +50,32 @@ def move_motor(direction, total_steps, max_speed=500, accel_steps=100):
 
         # Ensure speed does not exceed max_speed during acceleration or drop below 0 during deceleration
         current_speed = max(1, min(current_speed, max_speed))
-        
+
         # Calculate delay for current speed
         delay = 1 / (2 * current_speed)
-        
+
         # Move the motor one step at the current speed
         pi.write(STEP_PIN, 1)
         sleep(delay)
         pi.write(STEP_PIN, 0)
         sleep(delay)
 
+
 def calibrate_cm_to_steps():
     """
     Calibrates the conversion factor from centimeters to steps.
     """
     print("Place a known distance marker from the sensor.")
-    
+
     while True:
         steps = int(input("Enter the distance in steps: "))
         dir = int(input("Enter direction: "))
         speed = int(input("Enter speed: "))
         acel_steps = int(input("Enter acceleration steps: "))
-        print(f'Moving motor {steps} steps...')
+        print(f"Moving motor {steps} steps...")
         move_motor(dir, steps, speed, acel_steps)
         input("Press Enter to retry...")
+
 
 print("Connecting to pigpio daemon.")
 try:

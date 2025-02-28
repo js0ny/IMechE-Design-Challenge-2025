@@ -1,5 +1,6 @@
-from gpiozero import Button, DistanceSensor
 import time
+
+from gpiozero import Button, DistanceSensor
 
 # GPIO PINS
 SWITCH_PIN = 16

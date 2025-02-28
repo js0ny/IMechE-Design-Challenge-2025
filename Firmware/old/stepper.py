@@ -1,5 +1,6 @@
-from machine import Pin
 import utime
+from machine import Pin
+
 
 class Stepper:
     def __init__(self, step_pin, dir_pin, ms1_pin, ms2_pin, ms3_pin):
@@ -15,17 +16,17 @@ class Stepper:
             2: (1, 0, 0),
             4: (0, 1, 0),
             8: (1, 1, 0),
-            16: (1, 1, 1)
+            16: (1, 1, 1),
         }
         for pin, value in zip(self.ms_pins, settings[resolution]):
             Pin(pin, Pin.OUT).value(value)
- 
+
     def set_speed(self, speed, accelration):
         self.delay = 1 / abs(speed)  # delay in seconds
- 
+
     def set_direction(self, direction):
         self.dir_pin.value(direction)
- 
+
     def move_to(self, position):
         self.set_direction(1 if position > self.position else 0)
         while self.position != position:

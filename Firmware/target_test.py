@@ -1,5 +1,7 @@
-from target_detector import TargetDetector
 import threading
+
+from target_detector import TargetDetector
+
 
 def align(req_consec_zero_count):
     """
@@ -22,9 +24,12 @@ def align(req_consec_zero_count):
             consec_zero_count = 0  # Reset counter if displacement is outside threshold
             print("Adjusting alignment...")
 
+
 # Initialization and setup code
 print("Initializing target detector.")
-target_detector = TargetDetector(camera_index=1, desired_width=1280, desired_height=720, debug_mode=True)
+target_detector = TargetDetector(
+    camera_index=1, desired_width=1280, desired_height=720, debug_mode=True
+)
 
 # Start the target detector and main code threads
 detector_thread = threading.Thread(target=target_detector.detect_targets)

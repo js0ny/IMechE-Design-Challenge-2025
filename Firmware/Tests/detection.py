@@ -7,7 +7,7 @@ while True:
     _, frame = cap.read()
     hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-        # Blue color
+    # Blue color
     low_blue = np.array([94, 80, 2])
     high_blue = np.array([126, 255, 255])
     blue_mask = cv2.inRange(hsv_frame, low_blue, high_blue)
@@ -17,7 +17,6 @@ while True:
 
     cv2.imshow("Blue", blue)
     cv2.imshow("median", median)
-
 
     key = cv2.waitKey(1)
     if key == 27:

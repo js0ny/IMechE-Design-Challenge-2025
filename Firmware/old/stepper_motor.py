@@ -1,7 +1,9 @@
-import time
 import logging
 import math
+import time
+
 import RPi.GPIO as GPIO
+
 
 class StepperMotorController:
     def __init__(self, step_pin, dir_pin, ms1_pin, ms2_pin, ms3_pin):
@@ -33,7 +35,7 @@ class StepperMotorController:
             2: (1, 0, 0),
             4: (0, 1, 0),
             8: (1, 1, 0),
-            16: (1, 1, 1)
+            16: (1, 1, 1),
         }
         for pin, value in zip(self.ms_pins, settings[resolution]):
             GPIO.output(pin, value)
@@ -52,9 +54,13 @@ class StepperMotorController:
 
     def accelerate(self):
         if self.current_speed < self.target_speed:
-            self.current_speed = min(self.current_speed + self.acceleration, self.target_speed)
+            self.current_speed = min(
+                self.current_speed + self.acceleration, self.target_speed
+            )
         elif self.current_speed > self.target_speed:
-            self.current_speed = max(self.current_speed - self.acceleration, self.target_speed)
+            self.current_speed = max(
+                self.current_speed - self.acceleration, self.target_speed
+            )
 
     def step(self, steps, dir):
         if not isinstance(steps, int) or steps <= 0:
@@ -71,10 +77,12 @@ class StepperMotorController:
                 time.sleep(abs(self.current_speed))
                 GPIO.output(self.step_pin, GPIO.LOW)
                 time.sleep(abs(self.current_speed))
-                self.step_count += dir  # Increment or decrement step count based on direction
+                self.step_count += (
+                    dir  # Increment or decrement step count based on direction
+                )
         finally:
             self.moving = False
-    
+
     def get_step_count(self):
         return self.step_count
 

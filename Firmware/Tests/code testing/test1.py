@@ -1,28 +1,30 @@
 import cv2
 import numpy as np
 
+
 # Function to get center of contour
 def centroid(contour):
     M = cv2.moments(contour)
-    if M['m00'] != 0:
-        cx = int(round(M['m10'] / M['m00']))
-        cy = int(round(M['m01'] / M['m00']))
+    if M["m00"] != 0:
+        cx = int(round(M["m10"] / M["m00"]))
+        cy = int(round(M["m01"] / M["m00"]))
         center = (cx, cy)
         return center
     else:
         return None
 
+
 # Define color ranges for each ring
 color_ranges = [
-    ((0, 0, 0), (0, 0, 50)),    # Black
+    ((0, 0, 0), (0, 0, 50)),  # Black
     ((100, 100, 100), (120, 255, 255)),  # Blue
     ((0, 100, 100), (10, 255, 255)),  # Red
     ((20, 100, 100), (30, 255, 255)),  # Yellow
-    ((0, 0, 200), (255, 50, 255))  # White
+    ((0, 0, 200), (255, 50, 255)),  # White
 ]
 
 # Open video file
-video_path = 'path/to/your/video/file.mp4'
+video_path = "path/to/your/video/file.mp4"
 cap = cv2.VideoCapture(video_path)
 
 # Set desired FPS and resolution
@@ -64,19 +66,39 @@ while True:
                 frame = cv2.circle(frame, center, 2, (0, 0, 255), -1)
 
     # Draw coordinate axes
-    frame = cv2.line(frame, (frame.shape[1] // 2, 0), (frame.shape[1] // 2, frame.shape[0]), (255, 255, 255), 2)
-    frame = cv2.line(frame, (0, frame.shape[0] // 2), (frame.shape[1], frame.shape[0] // 2), (255, 255, 255), 2)
+    frame = cv2.line(
+        frame,
+        (frame.shape[1] // 2, 0),
+        (frame.shape[1] // 2, frame.shape[0]),
+        (255, 255, 255),
+        2,
+    )
+    frame = cv2.line(
+        frame,
+        (0, frame.shape[0] // 2),
+        (frame.shape[1], frame.shape[0] // 2),
+        (255, 255, 255),
+        2,
+    )
 
     # Display marker coordinates
     for i, center in enumerate(centers):
-        cv2.putText(frame, f"Marker {i + 1}: ({center[0] - frame.shape[1] // 2}, {frame.shape[0] // 2 - center[1]})", 
-                    (10, 30 * (i + 1)), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(
+            frame,
+            f"Marker {i + 1}: ({center[0] - frame.shape[1] // 2}, {frame.shape[0] // 2 - center[1]})",
+            (10, 30 * (i + 1)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
 
     # Display the result
     cv2.imshow("Tracking", frame)
 
     # Break the loop if 'q' key is pressed
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
 # Release the video capture and close the window

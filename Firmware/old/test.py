@@ -1,14 +1,19 @@
-from Firmware.target_detector import TargetDetector
-import time
 import threading
+import time
+
+from Firmware.target_detector import TargetDetector
 
 # Initialize the TargetDetector
 print("Initializing target detector.")
-target_detector = TargetDetector(camera_index=0, desired_width=640, desired_height=480, debug_mode=True)
+target_detector = TargetDetector(
+    camera_index=0, desired_width=640, desired_height=480, debug_mode=True
+)
+
 
 # Define a function to run target detection in a background thread
 def run_detection():
     target_detector.detect_targets()
+
 
 # Start the detection process in a separate thread
 detection_thread = threading.Thread(target=run_detection)
@@ -29,5 +34,5 @@ finally:
         # Here, you'd need a way to gracefully terminate detect_targets or just wait for it to complete
         # This may require adding some mechanism in your class to stop the loop in detect_targets, as threading.Thread does not have a direct stop method.
         pass  # Implement stopping mechanism
-    
+
     target_detector.release()

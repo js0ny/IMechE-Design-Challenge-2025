@@ -1,14 +1,16 @@
 import threading
 from time import sleep, time
-from Firmware.target_detector import TargetDetector
+
 import pigpio
 
+from Firmware.target_detector import TargetDetector
+
 # Constants for navigation (Distances are in steps)
-MM_TO_STEPS = 10 # 1 mm is 10 steps
-Y_OFFSET_TO_STEPS = 10 # 1 y-offset is 10 steps
-SAFE_DISTANCE = 200 # Safe distance to start deceleration to low speed
-DATUM_OFFSET = 100 # Offset of datum from camera centre
-ORIGIN_CLEARANCE = 1000 # distance to clear first target from vision
+MM_TO_STEPS = 10  # 1 mm is 10 steps
+Y_OFFSET_TO_STEPS = 10  # 1 y-offset is 10 steps
+SAFE_DISTANCE = 200  # Safe distance to start deceleration to low speed
+DATUM_OFFSET = 100  # Offset of datum from camera centre
+ORIGIN_CLEARANCE = 1000  # distance to clear first target from vision
 REQ_CONSEC = 5  # Required number of consecutive zero-displacements for alignment
 
 # Specification constants
@@ -18,10 +20,11 @@ PHASE_1_STOP_TIME = 7.5
 STEP_PIN = 21
 DIR_PIN = 20
 
-SWITCH_PIN = 16 # NO Terminal
+SWITCH_PIN = 16  # NO Terminal
 
 TRIG_PIN = 17
 ECHO_PIN = 18
+
 
 # Function to move motor
 def move_motor(direction, steps, speed=500):
@@ -32,29 +35,33 @@ def move_motor(direction, steps, speed=500):
         pi.write(STEP_PIN, 0)
         sleep(1 / (2 * frequency))
 
+
 def align(req_consec_zero_count):
     global frequency
     consec_zero_count = 0  # Counter for consecutive zero-displacements
 
     while consec_zero_count < req_consec_zero_count:
-            y_offset = target_detector.get_y_displacement()
-            print(f"Current Y offset: {y_offset}")
+        y_offset = target_detector.get_y_displacement()
+        print(f"Current Y offset: {y_offset}")
 
-            if abs(y_offset) <= 1 :
-                consec_zero_count += 1
-                print(f"Alignment count: {consec_zero_count}/{req_consec_zero_count}")
-            else:
-                consec_zero_count = 0  # Reset counter if displacement is outside the threshold
+        if abs(y_offset) <= 1:
+            consec_zero_count += 1
+            print(f"Alignment count: {consec_zero_count}/{req_consec_zero_count}")
+        else:
+            consec_zero_count = (
+                0  # Reset counter if displacement is outside the threshold
+            )
 
-                # Determine direction based on displacement
-                direction = 1 if y_offset > 0 else 0
+            # Determine direction based on displacement
+            direction = 1 if y_offset > 0 else 0
 
-                # Move motor in small steps for finer control
-                move_motor(direction, y_offset * Y_OFFSET_TO_STEPS)
-                print("Adjusting alignment...")
-                sleep(y_offset * frequency) # Wait for movement
+            # Move motor in small steps for finer control
+            move_motor(direction, y_offset * Y_OFFSET_TO_STEPS)
+            print("Adjusting alignment...")
+            sleep(y_offset * frequency)  # Wait for movement
 
-            sleep(0.1)  # Short delay to allow for displacement updates
+        sleep(0.1)  # Short delay to allow for displacement updates
+
 
 def measure_distance():
     # Send a 10us pulse to start the measurement
@@ -72,20 +79,23 @@ def measure_distance():
 
     # Calculate the distance
     elapsed_time = end_time - start_time
-    distance = (elapsed_time * 343000) / 2  # Speed of sound is ~343000 mm/s at sea level
+    distance = (
+        elapsed_time * 343000
+    ) / 2  # Speed of sound is ~343000 mm/s at sea level
 
     return round(distance)
 
+
 # Function to encapsulate main code
 def main_code():
-    '''
-    TODO: 
+    """
+    TODO:
     first using the ultrasonic sensor calculates the number of steps to move forward to the wall
     moves this amount of step - clearance distance
     once moved incremently moves forward until switch actuation
     once actuated returns to origin + offset distance to start detector
 
-    '''
+    """
 
     print("Main code thread started.")
 
@@ -101,10 +111,14 @@ def main_code():
         steps += steps_to_wall
 
         # Move forward until switch is pressed
-        while pi.read(SWITCH_PIN) == 1:  # Assuming switch is normally high and goes low when pressed
+        while (
+            pi.read(SWITCH_PIN) == 1
+        ):  # Assuming switch is normally high and goes low when pressed
             move_motor(1, 1)  # Move one step forward
             steps += 1
-            sleep(0.01)  # Short delay to debounce and slow down the step rate if necessary
+            sleep(
+                0.01
+            )  # Short delay to debounce and slow down the step rate if necessary
         print("Switch pressed. Reversing direction.")
 
         # Once switch is pressed, reverse direction
@@ -112,7 +126,7 @@ def main_code():
         move_motor(0, steps)  # Move back the same number of steps
         steps = 0
         print("Reversed direction.")
-        
+
         # Alignment process
         align(REQ_CONSEC)
 
@@ -138,12 +152,15 @@ def main_code():
     except KeyboardInterrupt:
         print("\nCtrl-C Pressed.  Stopping PIGPIO and exiting...")
     finally:
-        pi.set_PWM_dutycycle(STEP_PIN, 0) # PWM off
+        pi.set_PWM_dutycycle(STEP_PIN, 0)  # PWM off
         pi.stop()
+
 
 # Initialise target detector
 print("Initializing target detector.")
-target_detector = TargetDetector(camera_index=0, desired_width=640, desired_height=480, debug_mode=False)
+target_detector = TargetDetector(
+    camera_index=0, desired_width=640, desired_height=480, debug_mode=False
+)
 
 # Connect to pigiod daemon
 print("Connecting to pigpio daemon.")

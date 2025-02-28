@@ -1,8 +1,11 @@
 import cv2
 import numpy as np
 
+
 class TargetDetector:
-    def __init__(self, camera_index=0, desired_width=720, desired_height=720, debug_mode=False):
+    def __init__(
+        self, camera_index=0, desired_width=720, desired_height=720, debug_mode=False
+    ):
         self.cap = self.initialize_camera(camera_index, desired_width, desired_height)
         self.debug_mode = debug_mode
         self.x_displacement = 0
@@ -24,7 +27,7 @@ class TargetDetector:
 
         # Convert the image to the HSV color space
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        
+
         # Create a mask for the blue color using the predefined range
         mask = cv2.inRange(hsv, self.blue_hsv_lower, self.blue_hsv_upper)
 
@@ -54,12 +57,20 @@ class TargetDetector:
                     # Draw the center of the target
                     cv2.circle(frame, (center_x, center_y), 5, (0, 255, 0), -1)
                     # Draw center line of the frame
-                    cv2.line(frame, (frame.shape[1] // 2, 0), (frame.shape[1] // 2, frame.shape[0]), (0, 0, 255), 2)
+                    cv2.line(
+                        frame,
+                        (frame.shape[1] // 2, 0),
+                        (frame.shape[1] // 2, frame.shape[0]),
+                        (0, 0, 255),
+                        2,
+                    )
                     # Show the frame with the detected target
-                    cv2.imshow('Target Detection', frame)
+                    cv2.imshow("Target Detection", frame)
                     cv2.waitKey(1)
         else:
-            self.x_displacement = None  # Reset displacement when no valid targets are detected
+            self.x_displacement = (
+                None  # Reset displacement when no valid targets are detected
+            )
 
     def get_x_displacement(self):
         return self.x_displacement

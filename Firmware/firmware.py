@@ -1,180 +1,398 @@
+import logging
+import queue
 import threading
-from time import sleep, time
-from target_detector import TargetDetector
+import time
+
+import cv2
+import numpy as np
 import pigpio
-import math
+from gpiozero import Button, DistanceSensor
 
-# Constants for navigation CM_TO_STEPS = 10  # Conversion factor from cm to steps
-Y_OFFSET_TO_STEPS = 10  # Conversion factor from y-offset to steps
-SAFE_DISTANCE = 200  # Safe distance in steps for starting deceleration
-DATUM_OFFSET = 100  # Offset of datum from camera center in steps
-ORIGIN_CLEARANCE = 1000  # Steps to clear first target from vision (actual 185 mm)
-REQ_CONSEC = 5  # Required consecutive zero-displacements for alignment
+# Define GPIO pins used for motor control and sensor inputs
+STEP_PIN = 12  # Hardware PWM only available on GPIO 12, 13
+DIR_PIN = 20
+SWITCH_PIN = 16
+START_PIN = 23
+RESET_PIN = 24
+TRIG_PIN = 4
+ECHO_PIN = 17
 
-# Specification constants
-PHASE_1_STOP_TIME = 7.5  # Stop time in phase 1 in seconds # GPIO Pins configuration
-STEP_PIN = 21  # Stepper motor step pin
-DIR_PIN = 20  # Stepper motor direction pin
-SWITCH_PIN = 16  # Normally Open (NO) Terminal of the switch
-TRIG_PIN = 17  # Ultrasonic sensor trigger pin
-ECHO_PIN = 18  # Ultrasonic sensor echo pin
+# Define constants for navigation and motor operation
+SAFE_DIST = 300  # Safe distance threshold from wall in millimeters
+REQ_CONSEC = 5  # Required consecutive readings for alignment
+X_OFFSET_CONV_FACTOR = 0.15  # Conversion factor for x offset
+DATUM_OFFSET = 1900  # Steps to align with datum
+CAMERA_ORGIN_OFFSET = -40
 
-def move_motor(direction, total_steps, max_speed=500, accel_steps=100):
+# Specification for stopping time at the end of phase one
+PHASE_1_STOP_TIME = 7.5
+
+# Initialize a queue to store target offsets detected by the camera
+target_offset_queue = queue.Queue()
+
+
+def detector(
+    target_offset_queue: queue.Queue,
+    stop_event,
+    fps_limit=15,
+    width=640,
+    height=480,
+    debug=False,
+):
     """
-    Moves the motor with an S-curve acceleration and deceleration profile.
+    Thread-safe function to capture video frames and detect blue objects.
 
     Args:
-        direction (int): Direction to move (1 for forward, 0 for backward).
-        total_steps (int): Total number of steps to move.
-        max_speed (int): Maximum speed in steps per second.
-        accel_steps (int): Steps over which to accelerate and decelerate.
+        target_offset_queue (Queue): Thread-safe queue to store displacement values
+        stop_event: Threading event to signal stopping
+        fps_limit (int): Frame rate limit for video capture
+        width (int): Width of the video frame
+        height (int): Height of the video frame
+        debug (bool): Flag to activate debugging mode
     """
-    pi.write(DIR_PIN, direction)
-    
-    # Prepare S-curve acceleration parameters
-    accel_steps = min(accel_steps, total_steps // 2)
-    decel_start = total_steps - accel_steps
-    current_speed = 0
+    try:
+        # Initialise camera
+        cap = cv2.VideoCapture(0)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize frame buffer
+        cap.set(cv2.CAP_PROP_FPS, fps_limit)
 
-    for step in range(total_steps):
-        phase_progress = step / accel_steps if step < accel_steps else (total_steps - step) / accel_steps
+        # Precalculate constants
+        min_area = 0.05 * width * height
+        center_frame_x = width // 2
+        frame_time = 1 / fps_limit
+        last_frame_time = time.time()
 
-        # Adjust acceleration based on an S-curve profile
-        accel_factor = (1 - math.cos(math.pi * phase_progress)) / 2  # Generates an S-curve shape factor
+        while not stop_event.is_set():
+            # Frame rate control
+            current_time = time.time()
+            if (current_time - last_frame_time) < frame_time:
+                time.sleep(0.001)
+                continue
 
-        if step < accel_steps:  # Acceleration phase
-            current_speed = max_speed * accel_factor
-        elif step >= decel_start:  # Deceleration phase
-            current_speed = max_speed * accel_factor
+            last_frame_time = current_time
+
+            # Capture frame
+            ret, frame = cap.read()
+            if not ret:
+                logging.warning("Failed to capture frame")
+                continue
+
+            # Resize frame to reduce processing load
+            frame = cv2.resize(frame, (width, height), interpolation=cv2.INTER_NEAREST)
+
+            # Convert to LAB and threshold directly on the 'a' channel
+            b, g, r = cv2.split(frame)
+            red_mask = cv2.threshold(
+                cv2.subtract(r, cv2.max(b, g)),  # R - max(B,G)
+                30,  # Threshold value
+                255,
+                cv2.THRESH_BINARY,
+            )[1]
+
+            # Apply blur
+            red_mask = cv2.medianBlur(red_mask, 5)
+
+            # Find contours
+            contours, _ = cv2.findContours(
+                red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )
+
+            # Process largest valid contour
+            largest_contour = max(
+                (cnt for cnt in contours if cv2.contourArea(cnt) >= min_area),
+                key=cv2.contourArea,
+                default=None,
+            )
+            if largest_contour is not None:
+                # Use bounding box for displacement
+                x, y, w, h = cv2.boundingRect(largest_contour)
+                cX = x + w // 2
+                displacement_x = cX - center_frame_x
+
+                # Non-blocking queue operation
+                try:
+                    target_offset_queue.put_nowait(-displacement_x)
+                except Exception as e:
+                    logging.warning(f"Queue operation failed: {e}")
+
+                if debug:
+                    # Draw debug information
+                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                    cv2.putText(
+                        frame,
+                        f"Displacement: {displacement_x}px",
+                        (10, 20),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (0, 255, 0),
+                        1,
+                    )
+
+            if debug:
+                cv2.imshow("Frame", frame)
+                cv2.imshow("Mask", red_mask)
+
+                if cv2.waitKey(1) & 0xFF == 27:  # Exit on 'ESC'
+                    break
+
+    except Exception as e:
+        logging.error(f"Detector error: {str(e)}")
+    finally:
+        if "cap" in locals():
+            cap.release()
+        if debug:
+            cv2.destroyAllWindows()
+
+
+def distance():
+    return ultrasonic.distance * 1000
+
+
+def move_motor(
+    start_frequency, final_frequency, steps, dir=1, run_time=None, stop=False
+):
+    """Control motor movement with ramping."""
+    try:
+        # Set the motor direction
+        pi.write(DIR_PIN, dir)
+
+        # Determine ramping direction
+        if start_frequency < final_frequency:
+            # Ramp-Up
+            for step in range(steps):
+                progress = step / steps
+                current_frequency = (
+                    start_frequency + (final_frequency - start_frequency) * progress
+                )
+                pi.hardware_PWM(STEP_PIN, int(current_frequency), 500000)
+                time.sleep(0.05)
         else:
-            current_speed = max_speed  # Constant speed phase
+            # Ramp-Down
+            for step in range(steps):
+                progress = step / steps
+                current_frequency = (
+                    start_frequency - (start_frequency - final_frequency) * progress
+                )
+                pi.hardware_PWM(STEP_PIN, int(current_frequency), 500000)
+                time.sleep(0.05)
 
-        delay = 1 / (2 * max(current_speed, 1))  # Ensure delay is never zero
+        # Hold phase or continue indefinitely
+        if run_time:
+            pi.hardware_PWM(STEP_PIN, int(final_frequency), 500000)
+            time.sleep(run_time)
+            if stop:
+                stop_motor(start_frequency=final_frequency)
+        else:
+            # Continue indefinitely at final frequency
+            pi.hardware_PWM(STEP_PIN, int(final_frequency), 500000)
 
-        # Move the motor one step
-        pi.write(STEP_PIN, 1)
-        sleep(delay)
+    except KeyboardInterrupt:
+        logging.info("Motor stopped by user.")
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
+
+
+# Function to stop the motor
+def stop_motor(start_frequency=100, steps=20):
+    """Stops the motor by ramping down and then turning off the PWM signal."""
+    try:
+        # Ramp-Down
+        for step in range(steps):
+            progress = step / steps
+            current_frequency = start_frequency - (start_frequency * progress)
+            pi.hardware_PWM(STEP_PIN, int(current_frequency), 500000)
+            time.sleep(0.05)
+
+        # Stop PWM
+        pi.hardware_PWM(STEP_PIN, 0, 0)
+        logging.info("Motor stopped successfully.")
+    except Exception as e:
+        logging.error(f"An error occurred while stopping the motor: {e}")
+
+
+# Function to align with the target
+def align(
+    target_offset_queue: queue.Queue,
+    stop_event,
+    kp=0.1,
+    max_frequency=1000,
+    min_frequency=100,
+    steps=20,
+):
+    """Aligns the motor with the target using the displacement detected by the detector."""
+    try:
+        while not stop_event.is_set():
+            if not target_offset_queue.empty():
+                displacement = target_offset_queue.get()
+
+                # Calculate frequency based on displacement
+                frequency = min(
+                    max(min_frequency, abs(displacement) * kp), max_frequency
+                )
+                direction = 1 if displacement > 0 else 0
+
+                if frequency > min_frequency:
+                    move_motor(
+                        start_frequency=min_frequency,
+                        final_frequency=frequency,
+                        steps=steps,
+                        dir=direction,
+                        run_time=0.1,
+                    )
+                else:
+                    stop_motor(start_frequency=frequency, steps=steps)
+            else:
+                time.sleep(0.01)  # Avoid busy-waiting
+
+    except KeyboardInterrupt:
+        logging.info("Alignment stopped by user.")
+    except Exception as e:
+        logging.error(f"Alignment error: {e}")
+    finally:
+        stop_motor()
+        logging.info("Alignment loop terminated.")
+
+
+def cycle(target_offset_queue: queue.Queue, stop_event):
+    """Control the full operational cycle of the system."""
+    try:
+        # Start moving forward
+        move_motor(start_frequency=10, final_frequency=1000, steps=50, dir=0)
+        start_time = time.time()
+
+        # Continuously check distance
+        while not stop_event.is_set():
+            current_distance = distance()
+            logging.info(f"Distance: {current_distance:.1f} mm")
+
+            if current_distance <= SAFE_DIST:
+                # Slow down as it gets close to the barrier
+                move_motor(start_frequency=1000, final_frequency=300, steps=50, dir=0)
+                end_time = time.time()
+                break
+
+            time.sleep(0.1)
+
+        while not stop_event.is_set():
+            if limit_switch.is_pressed:
+                stop_motor()
+                break
+            time.sleep(0.1)
+
+        # Return to the origin
+        logging.info("Moving back")
+        move_motor(
+            start_frequency=10,
+            final_frequency=1000,
+            steps=50,
+            dir=1,
+            run_time=(end_time - start_time),
+        )
+        move_motor(start_frequency=1000, final_frequency=300, steps=50, dir=1)
+
+        logging.info("Finding target")
+        while not stop_event.is_set():
+            if not target_offset_queue.empty():
+                break
+        logging.info("Found target")
+
+        # Align with the origin / target
+        logging.info("Aligning")
+        align(target_offset_queue, stop_event)
+
         pi.write(STEP_PIN, 0)
-        sleep(delay)
+        logging.info("Camera aligned with target")
 
-def align(req_consec_zero_count):
-    """
-    Aligns the mechanism by adjusting its position based on y-offset until the required number of consecutive
-    zero-displacements is achieved.
+        # Align with datum
+        move_motor(
+            start_frequency=10,
+            final_frequency=200,
+            steps=100,
+            dir=0,
+            run_time=DATUM_OFFSET / 200,
+            stop=True,
+        )
+        pi.write(STEP_PIN, 0)
+        logging.info("Aligned")
 
-    Args:
-        req_consec_zero_count (int): The number of consecutive zero-displacements required for alignment.
-    """
-    consec_zero_count = 0  # Counter for consecutive zero-displacements
+        time.sleep(PHASE_1_STOP_TIME)
 
-    while consec_zero_count < req_consec_zero_count:
-        y_offset = target_detector.get_x_displacement()
-        print(f"Current Y offset: {y_offset}")
-        if y_offset == None: y_offset = 1
+        # Move forward to find the next target
+        move_motor(start_frequency=100, final_frequency=1000, steps=50, dir=0)
+        time.sleep(10)
 
-        if abs(y_offset) <= 1:
-            consec_zero_count += 1
-            print(f"Alignment count: {consec_zero_count}/{req_consec_zero_count}")
-        else:
-            consec_zero_count = 0  # Reset counter if displacement is outside threshold
-            direction = 1 if y_offset > 0 else 0  # Determine direction based on displacement
-            move_motor(direction, abs(y_offset) * Y_OFFSET_TO_STEPS)  # Adjust alignment
-            print("Adjusting alignment...")
+        while not stop_event.is_set():
+            if not target_offset_queue.empty():
+                move_motor(start_frequency=1000, final_frequency=300, steps=100, dir=0)
+                break
 
-        sleep(0.1)  # Short delay for displacement updates
+        logging.info("Aligning")
+        align(target_offset_queue, stop_event)
 
-def measure_distance():
-    """
-    Measures the distance using an ultrasonic sensor.
+        pi.write(STEP_PIN, 0)
+        logging.info("Camera aligned with target")
 
-    Returns:
-        int: The measured distance in millimeters.
-    """
-    pi.gpio_trigger(TRIG_PIN, 10, 1)  # Trigger ultrasonic pulse
+        # Align with datum
+        move_motor(
+            start_frequency=10,
+            final_frequency=200,
+            steps=100,
+            dir=0,
+            run_time=DATUM_OFFSET / 200,
+            stop=True,
+        )
+        pi.write(STEP_PIN, 0)
+        logging.info("Aligned")
 
-    start_time = time()
-    while pi.read(ECHO_PIN) == 0:  # Wait for echo start
-        start_time = time()
+        logging.info("Cycle complete")
+        time.sleep(20)
 
-    end_time = time()
-    while pi.read(ECHO_PIN) == 1:  # Wait for echo end
-        end_time = time()
+    except Exception as e:
+        logging.error(f"Cycle error: {str(e)}")
+        stop_motor()
 
-    elapsed_time = end_time - start_time  # Calculate time taken for the echo to return
-    distance = (elapsed_time * 343000) / 2  # Calculate distance based on speed of sound
-    
-    return round(distance)
 
-def main_code():
-    """
-    Main code execution function.
-    """
-    print("Main code thread started.")
+if __name__ == "__main__":
+    # Configure logging
+    logging.basicConfig(level=logging.INFO)
 
-    global frequency  # Use the global frequency variable
+    # Initialize pigpio library instance and configure GPIO modes
+    pi = pigpio.pi()
 
-    start_time = time()
-    distance_to_wall = measure_distance()  # Measure distance to the wall
-    steps_to_wall = distance_to_wall * CM_TO_STEPS  # Convert distance to steps
+    if not pi.connected:
+        logging.error("Error connecting to pigpio daemon. Is the daemon running?")
+        exit(1)
 
-    print(f"{distance_to_wall} mm to wall")
-    print(f"{steps_to_wall} steps to wall")
+    pi.set_mode(STEP_PIN, pigpio.OUTPUT)
+    pi.set_mode(DIR_PIN, pigpio.OUTPUT)
+
+    # Initialize sensors and input devices
+    ultrasonic = DistanceSensor(echo=ECHO_PIN, trigger=TRIG_PIN)
+    limit_switch = Button(SWITCH_PIN)
+    start = Button(START_PIN)
+    reset = Button(RESET_PIN)
+
+    # Initialize thread-safe components
+    offset_queue = queue.Queue(maxsize=20)
+    stop_event = threading.Event()
 
     try:
-        move_motor(1, steps_to_wall)  # Move towards the wall
+        detector_thread = threading.Thread(
+            target=detector, args=(offset_queue, stop_event)
+        )
+        detector_thread.start()
 
-        while pi.read(SWITCH_PIN):  # Wait until the switch is pressed
-            sleep(0.01)
+        cycle_thread = threading.Thread(target=cycle, args=(offset_queue, stop_event))
+        cycle_thread.start()
 
-        print("Switch pressed. Stopping motor...")
-        pi.set_PWM_dutycycle(STEP_PIN, 0)  # Stop the motor
+        # Wait for threads to complete
+        detector_thread.join()
+        cycle_thread.join()
 
-        sleep(0.5)  # Short delay before moving back
-        move_motor(0, steps_to_wall)  # Move back to the original position
-
-        align(REQ_CONSEC)  # Alignment process
-
-        print("Alignment completed. Waiting for phase 1 stop time.")
-        sleep(PHASE_1_STOP_TIME)
-
-        print("Moving forward clearance distance.")
-        move_motor(1, ORIGIN_CLEARANCE)  # Move forward for clearance
-
-        # Further operations omitted for brevity
     except KeyboardInterrupt:
-        print("\nCtrl-C Pressed. Stopping PIGPIO and exiting...")
+        logging.info("KeyboardInterrupt detected, stopping all threads.")
     finally:
-        pi.set_PWM_dutycycle(STEP_PIN, 0)  # Ensure motor is stopped
-        pi.stop()
-
-# Initialization and setup code
-print("Initializing target detector.")
-target_detector = TargetDetector(camera_index=0, desired_width=640, desired_height=480, debug_mode=False)
-
-print("Connecting to pigpio daemon.")
-try:
-    pi = pigpio.pi()  # Initialize pigpio
-except:
-    print("Could not connect to pigpio daemon")
-
-# Configure GPIO modes and initial settings
-pi.set_mode(DIR_PIN, pigpio.OUTPUT)
-pi.set_mode(STEP_PIN, pigpio.OUTPUT)
-frequency = 2500 # Set a default frequency for stepper movement
-pi.set_PWM_frequency(STEP_PIN, frequency)
-
-pi.set_mode(SWITCH_PIN, pigpio.INPUT)
-pi.set_pull_up_down(SWITCH_PIN, pigpio.PUD_UP)
-
-pi.set_mode(TRIG_PIN, pigpio.OUTPUT)
-pi.set_mode(ECHO_PIN, pigpio.INPUT)
-
-# Start the target detector and main code threads
-detector_thread = threading.Thread(target=target_detector.detect_targets)
-detector_thread.start()
-
-main_thread = threading.Thread(target=main_code)
-main_thread.start()
-
-main_thread.join()
-detector_thread.join()
+        stop_event.set()
+        pi.stop()  # Clean up pigpio resources

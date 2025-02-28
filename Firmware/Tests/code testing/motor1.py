@@ -1,11 +1,13 @@
 from time import sleep, time
+
 import pigpio
+
 
 def generate_ramp(ramp):
     """Generate ramp wave forms.
     ramp:  List of [Frequency, Steps]
     """
-    pi.wave_clear()     # clear existing waves
+    pi.wave_clear()  # clear existing waves
     length = len(ramp)  # number of ramp levels
     wid = [-1] * length
 
@@ -29,8 +31,9 @@ def generate_ramp(ramp):
 
     pi.wave_chain(chain)  # Transmit chain.
 
-DIR = 20     # Direction GPIO Pin
-STEP = 21    # Step GPIO Pin
+
+DIR = 20  # Direction GPIO Pin
+STEP = 21  # Step GPIO Pin
 SWITCH = 16  # GPIO pin of switch
 
 # Connect to pigpiod daemon
@@ -44,24 +47,26 @@ pi.set_mode(STEP, pigpio.OUTPUT)
 pi.set_mode(SWITCH, pigpio.INPUT)
 pi.set_pull_up_down(SWITCH, pigpio.PUD_UP)
 
-MODE = (14, 15, 18)   # Microstep Resolution GPIO Pins
-RESOLUTION = {'Full': (0, 0, 0),
-              'Half': (1, 0, 0),
-              '1/4': (0, 1, 0),
-              '1/8': (1, 1, 0),
-              '1/16': (0, 0, 1),
-              '1/32': (1, 0, 1)}
+MODE = (14, 15, 18)  # Microstep Resolution GPIO Pins
+RESOLUTION = {
+    "Full": (0, 0, 0),
+    "Half": (1, 0, 0),
+    "1/4": (0, 1, 0),
+    "1/8": (1, 1, 0),
+    "1/16": (0, 0, 1),
+    "1/32": (1, 0, 1),
+}
 
 # Ramp up
-#generate_ramp([[320, 200],
-#	       [500, 400],
-#	       [800, 500],
-#	       [1000, 700],
-#	       [1600, 900],
-#	       [2000, 10000]])
+# generate_ramp([[320, 200],
+# 	       [500, 400],
+# 	       [800, 500],
+# 	       [1000, 700],
+# 	       [1600, 900],
+# 	       [2000, 10000]])
 
 for i in range(3):
-    pi.write(MODE[i], RESOLUTION['Full'][i])
+    pi.write(MODE[i], RESOLUTION["Full"][i])
 
 # Set duty cycle and frequency
 pi.set_PWM_dutycycle(STEP, 128)  # PWM 1/2 On 1/2 Off
@@ -73,6 +78,7 @@ direction = 1
 # Limit switch actuation flag
 first_press = True
 
+
 # Callback function to toggle direction only on down press (FALLING_EDGE)
 def toggle_direction(gpio, level, tick):
     global direction, first_press
@@ -80,6 +86,7 @@ def toggle_direction(gpio, level, tick):
         direction = not direction
         pi.write(DIR, direction)
         first_press = False
+
 
 # Set up a falling edge detection on the switch, calling toggle_direction
 pi.callback(SWITCH, pigpio.RISING_EDGE, toggle_direction)

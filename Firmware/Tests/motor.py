@@ -1,5 +1,6 @@
-import pigpio
 import time
+
+import pigpio
 
 # Define GPIO pins for the stepper motor
 STEP_PIN = 21
@@ -8,9 +9,10 @@ pi = pigpio.pi()
 pi.set_mode(STEP_PIN, pigpio.OUTPUT)
 pi.set_mode(DIR_PIN, pigpio.OUTPUT)
 
+
 def move_motor(start_frequency, final_frequency, steps, dir=1, run_time=None):
     """Generate ramp waveforms from start to final frequency.
-    
+
     Parameters:
     - start_frequency: Starting frequency of the ramp.
     - final_frequency: Ending frequency of the ramp.
@@ -35,13 +37,13 @@ def move_motor(start_frequency, final_frequency, steps, dir=1, run_time=None):
         micros = int(500000 / current_frequency)  # microseconds for half a step
         wf = [
             pigpio.pulse(1 << STEP_PIN, 0, micros),
-            pigpio.pulse(0, 1 << STEP_PIN, micros)
+            pigpio.pulse(0, 1 << STEP_PIN, micros),
         ]
         pi.wave_add_generic(wf)
         wave_id = pi.wave_create()
         wid.append(wave_id)  # Append the new wave ID to the list
         current_frequency += frequency_step  # increment or decrement frequency
-    
+
     # Generate a chain of waves
     chain = []
     for wave_id in wid:
@@ -62,6 +64,7 @@ def move_motor(start_frequency, final_frequency, steps, dir=1, run_time=None):
     global last_wave_ids
     last_wave_ids = wid  # Store wave IDs globally to allow stopping later
 
+
 def stop_motor():
     """Stop any running waveforms and clean up."""
     global last_wave_ids
@@ -70,6 +73,7 @@ def stop_motor():
         for wave_id in last_wave_ids:
             pi.wave_delete(wave_id)  # Clean up each waveform individually
     last_wave_ids = None
+
 
 # Example usage:
 if not pi.connected:

@@ -1,7 +1,8 @@
-import cv2
-from picamera2 import Picamera2
 import time
+
+import cv2
 import numpy as np
+from picamera2 import Picamera2
 
 picam2 = Picamera2()
 dispW = 1280
@@ -28,7 +29,7 @@ while True:
     frame = picam2.capture_array()
     frame = cv2.flip(frame, -1)
     frameHSV = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    cv2.putText(frame, str(int(fps)) + ' FPS', pos, font, height, myColor, weight)
+    cv2.putText(frame, str(int(fps)) + " FPS", pos, font, height, myColor, weight)
 
     # Threshold the frame to get only blue pixels
     blueMask = cv2.inRange(frameHSV, blueLower, blueUpper)
@@ -53,7 +54,7 @@ while True:
             cv2.circle(frame, center, 5, (0, 255, 0), -1)
 
     cv2.imshow("Camera", frame)
-    if cv2.waitKey(1) == ord('q'):
+    if cv2.waitKey(1) == ord("q"):
         break
 
     tEnd = time.time()

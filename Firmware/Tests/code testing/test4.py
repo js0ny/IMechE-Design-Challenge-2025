@@ -1,22 +1,23 @@
+import time  # Import the time module
+
 import cv2
 import numpy as np
-import time  # Import the time module
+
 
 # Function to get center of contour
 def centroid(contour):
     M = cv2.moments(contour)
-    if M['m00'] != 0:
-        cx = int(round(M['m10'] / M['m00']))
-        cy = int(round(M['m01'] / M['m00']))
+    if M["m00"] != 0:
+        cx = int(round(M["m10"] / M["m00"]))
+        cy = int(round(M["m01"] / M["m00"]))
         center = (cx, cy)
         return center
     else:
         return None
 
+
 # Define color ranges for each ring
-color_ranges = [
-    ((100, 100, 100), (120, 255, 255))  # Blue
-]
+color_ranges = [((100, 100, 100), (120, 255, 255))]  # Blue
 
 # Open camera
 cap = cv2.VideoCapture(1)  # Use 0 for the default camera
@@ -33,7 +34,10 @@ cap.set(cv2.CAP_PROP_FPS, desired_fps)
 
 # Check if the camera properties were set correctly
 print("Actual FPS:", cap.get(cv2.CAP_PROP_FPS))
-print("Actual Resolution:", (cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+print(
+    "Actual Resolution:",
+    (cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+)
 
 # Variables for controlling the frame rate
 fps_start_time = time.time()
@@ -80,7 +84,7 @@ while True:
     fps_start_time = time.time()
 
     # Break the loop if 'q' key is pressed
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
 # Release the camera and close the window

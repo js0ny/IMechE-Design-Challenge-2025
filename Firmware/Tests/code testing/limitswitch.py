@@ -22,13 +22,17 @@ GPIO.setup(SWITCH_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 switch_state = GPIO.input(SWITCH_PIN)
 prev_switch_state = switch_state
 
+
 # Define a function to handle button presses
 def button_callback(channel):
     global switch_state
     switch_state = GPIO.input(SWITCH_PIN)
 
+
 # Add an event listener for the button press
-GPIO.add_event_detect(SWITCH_PIN, GPIO.BOTH, callback=button_callback, bouncetime=DEBOUNCE_TIME_MS)
+GPIO.add_event_detect(
+    SWITCH_PIN, GPIO.BOTH, callback=button_callback, bouncetime=DEBOUNCE_TIME_MS
+)
 
 try:
     # Main loop
@@ -39,9 +43,8 @@ try:
                 print("The limit switch: TOUCHED -> UNTOUCHED")
             else:
                 print("The limit switch: UNTOUCHED -> TOUCHED")
-            
-            prev_switch_state = switch_state
 
+            prev_switch_state = switch_state
 
         if switch_state == GPIO.HIGH:
             print("The limit switch: UNTOUCHED")

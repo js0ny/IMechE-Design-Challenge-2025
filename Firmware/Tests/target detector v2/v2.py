@@ -29,14 +29,23 @@ while True:
     blurred = cv2.GaussianBlur(gray, (9, 9), 2)
 
     # Apply Hough transform on the blurred image to detect circles
-    detected_circles = cv2.HoughCircles(blurred,
-                                        cv2.HOUGH_GRADIENT, 1, minDist=50,
-                                        param1=100, param2=30, minRadius=10, maxRadius=0)
+    detected_circles = cv2.HoughCircles(
+        blurred,
+        cv2.HOUGH_GRADIENT,
+        1,
+        minDist=50,
+        param1=100,
+        param2=30,
+        minRadius=10,
+        maxRadius=0,
+    )
 
     # Draw the largest detected circle
     if detected_circles is not None:
         detected_circles = np.uint16(np.around(detected_circles))
-        largest_circle = max(detected_circles[0, :], key=lambda x: x[2])  # Select the largest circle
+        largest_circle = max(
+            detected_circles[0, :], key=lambda x: x[2]
+        )  # Select the largest circle
 
         x, y, r = largest_circle[:3]
 
@@ -49,7 +58,7 @@ while True:
     # Display the frame with the detected circle
     cv2.imshow("Detected Circle", frame)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
 # Release resources

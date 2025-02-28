@@ -1,11 +1,13 @@
 from time import sleep
+
 import pigpio
+
 
 class StepperController:
     def __init__(self, dir_pin=20, step_pin=21):
         self.dir_pin = dir_pin
         self.step_pin = step_pin
-        self.direction = 1 # 1 forward, 0 backward
+        self.direction = 1  # 1 forward, 0 backward
 
         # Connect to pigpiod daemon
         pi = pigpio.pi()
@@ -13,7 +15,7 @@ class StepperController:
         # Set up pins as an output
         pi.set_mode(dir_pin, pigpio.OUTPUT)
         pi.set_mode(step_pin, pigpio.OUTPUT)
-    
+
     def set_pwm(self, duty_cycle, frequency):
         self.pi.set_PWM_dutycycle(self.step_pin, duty_cycle)
         self.pi.set_PWM_frequency(self.step_pin, frequency)
